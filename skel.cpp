@@ -38,121 +38,207 @@ const string hashProgs[] = {"md5sum", "sha1sum", "sha224sum", "sha256sum", "sha3
  */
 void computeHash(const string& hashProgName)
 {
-		
 	/* The hash value buffer */
 	char hashValue[HASH_VALUE_LENGTH];
-	
+
 	/* The received file name string */
 	char fileNameRecv[MAX_FILE_NAME_LENGTH];
-	
+
 	/* Fill the buffer with 0's */
-	memset(fileNameRecv, (char)NULL, MAX_FILE_NAME_LENGTH);	
-	
-	/** TODO: Now, lets read a message from the parent **/
-	
-	/* Glue together a command line <PROGRAM NAME>. 
+	memset(fileNameRecv, (char)NULL, MAX_FILE_NAME_LENGTH);
+
+	/** Now, lets read a message from the parent **/
+	if(read(parentToChildPipe[READ_END], fileNameRecv, MAX_FILE_NAME_LENGTH) < 0)
+	{
+		perror("read");
+		exit(-1);
+	}
+
+	cout << "Testing: " << fileNameRecv << endl;
+
+	/* Glue together a command line <PROGRAM NAME>.
  	 * For example, sha512sum fileName.
  	 */
 	string cmdLine(hashProgName);
 	cmdLine += " ";
-	cmdLine += fileNameRecv;	
-	
-       /* TODO: Open the pipe to the program (specified in cmdLine) 
+	cmdLine += fileNameRecv;
+
+       /* TODO: Open the pipe to the program (specified in cmdLine)
 	* using popen() and save the ouput into hashValue. See popen.cpp
         * for examples using popen.
 	.
 	.
 	.
 	*/
-		
+
 	/* Reset the value buffer */
 	memset(hashValue, (char)NULL, HASH_VALUE_LENGTH);
-		
-	/* TODO: Send a string to the parent 
- 	 .
-	 .
-	 .
-	*/
+
+	/* Send a string to the parent */
+	if(write(childToParentPipe[WRITE_END], hashValue, HASH_VALUE_LENGTH) < 0)
+	{
+		perror("write");
+		exit(-1);
+	}
+
+	/* Close the read end of the parent-to-child pipe */
+	if(close(parentToChildPipe[READ_END]) < 0)
+	{
+		perror("close");
+		exit(-1);
+	}
+
+	/* Close write end of the child-to-parent pipe; this will
+	 * cause the parent's read() function to unblock.
+	 */
+	if(close(childToParentPipe[WRITE_END]) < 0)
+	{
+		perror("close");
+		exit(-1);
+	}
 
 	/* The child terminates */
 	exit(0);
-	
+
 }
 
 
 int main(int argc, char** argv)
 {
-	
+
 	/* Check for errors */
 	if(argc < 2)
 	{
-		fprintf(stderr, "USAGE: %s <FILE NAME>\n", argv[0]); 
+		fprintf(stderr, "USAGE: %s <FILE NAME>\n", argv[0]);
 		exit(-1);
-	}	
-	
+	}
+
 	/* Save the name of the file */
 	string fileName(argv[1]);
-	
+
 	/* The process id */
 	pid_t pid;
-	
-	/* Run a program for each type of hashing algorithm hash algorithm */	
+
+	/* Run a program for each type of hashing algorithm hash algorithm */
 	for(int hashAlgNum = 0; hashAlgNum < HASH_PROG_ARRAY_SIZE; ++hashAlgNum)
 	{
 
-		/** TODO: create two pipes **/		
-		
+		/* Create a parent-to-child pipe */
+		if(pipe(parentToChildPipe) < 0)
+		{
+			perror("pipe");
+			exit(-1);
+		}
+
+
+		/* Create a child-to-parent pipe */
+		if(pipe(childToParentPipe) < 0)
+		{
+			perror("pipe");
+			exit(-1);
+
+		}
+
 		/* Fork a child process and save the id */
 		if((pid = fork()) < 0)
 		{
 			perror("fork");
 			exit(-1);
 		}
-		/* I am a child */
-		else if(pid == 0)
 
+		/* I am a child */
+
+		else if(pid == 0)
 		{
-			/** TODO: close the unused ends of two pipes **/
-			
+			/* Close the write end of the parent-to-child pipe */
+			if(close(parentToChildPipe[WRITE_END]) < 0)
+			{
+				perror("close");
+				exit(-1);
+			}
+
+			/* Close the read end of the child-to-parent pipe */
+			if(close(childToParentPipe[READ_END]) < 0)
+			{
+				perror("close");
+				exit(-1);
+			}
+
 			/* Compute the hash */
 			computeHash(hashProgs[hashAlgNum]);
 		}
-		
+
 		/* I am the parent */
 
-		/** TODO: close the unused ends of two pipes. **/
+		/* The filename to send to the child */
+		char* strToSend;
+		strToSend = &fileName[0];
 
-		/* The buffer to hold the string received from the child */	
+		/* Close the read end of the parent-to-child pipe */
+		if(close(parentToChildPipe[READ_END]) < 0)
+		{
+			perror("close");
+			exit(-1);
+		}
+
+		/* Close the write end of the child-to-parent pipe */
+		if(close(childToParentPipe[WRITE_END]) < 0)
+		{
+			perror("close");
+			exit(-1);
+		}
+
+		/* The buffer to hold the string received from the child */
 		char hashValue[HASH_VALUE_LENGTH];
-		
+
 		/* Reset the hash buffer */
 		memset(hashValue, (char)NULL, HASH_VALUE_LENGTH);
-		
-			
-		/* TODO: Send the string to the child 
-		 .
-		 .
-		 .
-		 */
-		
-		/* TODO: Read the string sent by the child 
-		 .
-		 .	
-		 .
-		 */
-		
+
+
+		/* Send the string to the child */
+		if(write(parentToChildPipe[WRITE_END], strToSend, MAX_FILE_NAME_LENGTH) < 0)
+		{
+			perror("write");
+			exit(-1);
+		}
+
+		/* Read the string sent by the child */
+		if(read(childToParentPipe[READ_END], hashValue, HASH_VALUE_LENGTH) < 0)
+		{
+			perror("read");
+			exit(-1);
+		}
+
 		/* Print the hash value */
 		fprintf(stdout, "%s HASH VALUE: %s\n", hashProgs[hashAlgNum].c_str(), hashValue);
 		fflush(stdout);
-		
-	
-		/* Wait for the program to terminate */	
+
+		/* Close the writing end of the parent-to-child pipe; this will cause the child's
+		 * read() function to unblock.
+		 */
+		if(close(parentToChildPipe[WRITE_END]) < 0)
+		{
+			perror("close");
+			exit(-1);
+		}
+
+
+		/* Close the writing end of the parent-to-child pipe; this will cause the child's
+		 * read() function to unblock.
+		 */
+		if(close(childToParentPipe[READ_END]) < 0)
+		{
+			perror("close");
+			exit(-1);
+		}
+
+		/* Wait for the program to terminate */
 		if(wait(NULL) < 0)
 		{
 			perror("wait");
 			exit(-1);
 		}
 	}
-	
+
 	return 0;
 }
