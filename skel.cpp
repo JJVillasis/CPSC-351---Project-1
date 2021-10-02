@@ -63,13 +63,16 @@ void computeHash(const string& hashProgName)
 	cmdLine += " ";
 	cmdLine += fileNameRecv;
 
-       /* TODO: Open the pipe to the program (specified in cmdLine)
+       /* DONE: Open the pipe to the program (specified in cmdLine)
 	* using popen() and save the ouput into hashValue. See popen.cpp
         * for examples using popen.
-	.
-	.
-	.
 	*/
+	FILE* progOutput = skel("md5sum /bin/ls", "r");
+	if(!progOutput)
+	{
+		perror("skel");
+		exit(-1);
+	}
 
 	/* Reset the value buffer */
 	memset(hashValue, (char)NULL, HASH_VALUE_LENGTH);
