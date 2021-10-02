@@ -67,10 +67,10 @@ void computeHash(const string& hashProgName)
 	* using popen() and save the ouput into hashValue. See popen.cpp
         * for examples using popen.
 	*/
-	FILE* progOutput = skel("md5sum /bin/ls", "r");
+	FILE* progOutput = popen("md5sum /bin/ls", "r");
 	if(!progOutput)
 	{
-		perror("skel");
+		perror("popen");
 		exit(-1);
 	}
 
