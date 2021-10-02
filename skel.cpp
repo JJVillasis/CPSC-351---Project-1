@@ -54,25 +54,39 @@ void computeHash(const string& hashProgName)
 		exit(-1);
 	}
 
-	cout << "Testing: " << fileNameRecv << endl;
-
 	/* Glue together a command line <PROGRAM NAME>.
- 	 * For example, sha512sum fileName.
- 	 */
+ 	 * For example, sha512sum fileName.*/
 	string cmdLine(hashProgName);
 	cmdLine += " ";
 	cmdLine += fileNameRecv;
 
-       /* TODO: Open the pipe to the program (specified in cmdLine)
-	* using popen() and save the ouput into hashValue. See popen.cpp
-        * for examples using popen.
-	.
-	.
-	.
-	*/
+	/* Open the pipe to the program (specified in cmdLine)*/
+
+	FILE* progOutput = popen(cmdLine.c_str(), "r");
+
+	/* Make sure that popen succeeded */
+	if(!progOutput)
+	{
+		perror("popen");
+		exit(-1);
+	}
 
 	/* Reset the value buffer */
 	memset(hashValue, (char)NULL, HASH_VALUE_LENGTH);
+
+	/* Read the program output into the buffer */
+	if(fread(hashValue, sizeof(char), sizeof(char) * HASH_VALUE_LENGTH, progOutput) < 0)
+	{
+		perror("fread");
+		exit(-1);
+	}
+
+	/* Close the file pointer representing the program output */
+	if(pclose(progOutput) < 0)
+	{
+		perror("perror");
+		exit(-1);
+	}
 
 	/* Send a string to the parent */
 	if(write(childToParentPipe[WRITE_END], hashValue, HASH_VALUE_LENGTH) < 0)
@@ -170,10 +184,6 @@ int main(int argc, char** argv)
 
 		/* I am the parent */
 
-		/* The filename to send to the child */
-		char* strToSend;
-		strToSend = &fileName[0];
-
 		/* Close the read end of the parent-to-child pipe */
 		if(close(parentToChildPipe[READ_END]) < 0)
 		{
@@ -196,7 +206,7 @@ int main(int argc, char** argv)
 
 
 		/* Send the string to the child */
-		if(write(parentToChildPipe[WRITE_END], strToSend, MAX_FILE_NAME_LENGTH) < 0)
+		if(write(parentToChildPipe[WRITE_END], fileName.c_str(), MAX_FILE_NAME_LENGTH) < 0)
 		{
 			perror("write");
 			exit(-1);
